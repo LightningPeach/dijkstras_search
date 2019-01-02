@@ -1,0 +1,5 @@
+[package]
+name = "dijkstras_search"
+version = "0.1.0"
+authors = ["Vladislav Melnik <vladislav.melnik@bitfury.com>"]
+edition = "2018"
