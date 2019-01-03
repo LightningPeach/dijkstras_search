@@ -2,7 +2,6 @@ use std::{
     collections::BTreeMap,
     iter::Iterator,
     ops::Add,
-    rc::{Rc, Weak},
 };
 
 pub trait Edge {
@@ -12,12 +11,12 @@ pub trait Edge {
 }
 
 pub struct ShortestPath<Node> {
-    prev_map: BTreeMap<Rc<Node>, Rc<Node>>,
-    sequence: Vec<Rc<Node>>,
+    prev_map: BTreeMap<Node, Node>,
+    sequence: Vec<Node>,
 }
 
-impl<Node> ShortestPath<Node> where Node: Eq + Ord {
-    pub fn new(prev_map: BTreeMap<Rc<Node>, Rc<Node>>, start: Rc<Node>, goal: Rc<Node>) -> Self {
+impl<Node> ShortestPath<Node> where Node: Eq + Ord + Clone {
+    pub fn new(prev_map: BTreeMap<Node, Node>, start: Node, goal: Node) -> Self {
         let mut sequence = Vec::new();
         sequence.push(goal.clone());
 
@@ -42,11 +41,11 @@ impl<Node> ShortestPath<Node> where Node: Eq + Ord {
         }
     }
 
-    pub fn prev(&self, node: Rc<Node>) -> Option<Rc<Node>> {
+    pub fn prev(&self, node: Node) -> Option<Node> {
         self.prev_map.get(&node).map(Clone::clone)
     }
 
-    pub fn path(self) -> Vec<Rc<Node>> {
+    pub fn path(self) -> Vec<Node> {
         self.sequence
     }
 }
@@ -55,13 +54,13 @@ pub trait Graph
 where
     Self: Sized,
 {
-    type Node: Ord + std::fmt::Debug;
-    type Edge: Edge + std::fmt::Debug;
+    type Node: Ord + Clone + Eq;
+    type Edge: Edge;
 
-    fn neighbors(&self, node: &Self::Node) -> Vec<(Weak<Self::Node>, Self::Edge)>;
+    fn neighbors(&self, node: Self::Node) -> Vec<(Self::Node, Self::Edge)>;
 
-    fn path(&self, start: Rc<Self::Node>) -> BTreeMap<Rc<Self::Node>, Rc<Self::Node>> {
-        let mut distance: BTreeMap<Rc<Self::Node>, <Self::Edge as Edge>::Cost> = BTreeMap::new();
+    fn path(&self, start: Self::Node) -> BTreeMap<Self::Node, Self::Node> {
+        let mut distance: BTreeMap<Self::Node, <Self::Edge as Edge>::Cost> = BTreeMap::new();
         let mut prev = BTreeMap::new();
         distance.insert(start, Default::default());
 
@@ -79,14 +78,12 @@ where
 
             visited.insert(min.clone(), ());
 
-            for (this, edge) in self.neighbors(&min) {
-                if let Some(this) = this.upgrade() {
-                    let alt = min_cost.clone() + edge.cost();
-                    let this_distance = distance.get(&this);
-                    if this_distance.is_none() || this_distance.unwrap().clone() >= alt {
-                        distance.insert(this.clone(), alt);
-                        prev.insert(this.clone(), min.clone());
-                    }
+            for (this, edge) in self.neighbors(min.clone()) {
+                let alt = min_cost.clone() + edge.cost();
+                let this_distance = distance.get(&this);
+                if this_distance.is_none() || this_distance.unwrap().clone() >= alt {
+                    distance.insert(this.clone(), alt);
+                    prev.insert(this.clone(), min.clone());
                 }
             }
         }
@@ -99,12 +96,10 @@ where
 mod test {
     use super::{ShortestPath, Edge, Graph};
 
-    use std::rc::{Rc, Weak};
-
     #[derive(Default, Clone, Debug)]
     struct EdgeImpl {
-        from: Weak<u8>,
-        to: Weak<u8>,
+        from: u8,
+        to: u8,
         weight: u32,
     }
 
@@ -117,7 +112,7 @@ mod test {
     }
 
     struct GraphImpl {
-        nodes: Vec<Rc<u8>>,
+        nodes: Vec<u8>,
         edges: Vec<EdgeImpl>,
     }
 
@@ -125,9 +120,9 @@ mod test {
         type Node = u8;
         type Edge = EdgeImpl;
 
-        fn neighbors(&self, node: &Self::Node) -> Vec<(Weak<Self::Node>, Self::Edge)> {
+        fn neighbors(&self, node: Self::Node) -> Vec<(Self::Node, Self::Edge)> {
             self.edges.iter().filter_map(|e| {
-                match (*e.from.upgrade().unwrap() == *node, *e.to.upgrade().unwrap() == *node) {
+                match (e.from == node.clone(), e.to == node.clone()) {
                     (true, _) => Some((e.to.clone(), e.clone())),
                     (_, true) => Some((e.from.clone(), e.clone())),
                     _ => None,
@@ -139,7 +134,7 @@ mod test {
     impl GraphImpl {
         pub fn new(count: u8) -> Self {
             GraphImpl {
-                nodes: (0..count).map(Rc::new).collect(),
+                nodes: (0..count).collect(),
                 edges: Vec::new(),
             }
         }
@@ -149,8 +144,8 @@ mod test {
             let to = to as usize;
             if from < self.nodes.len() && to < self.nodes.len() {
                 self.edges.push(EdgeImpl {
-                    from: Rc::downgrade(&self.nodes[from]),
-                    to: Rc::downgrade(&self.nodes[to]),
+                    from: self.nodes[from],
+                    to: self.nodes[to],
                     weight,
                 })
             }
@@ -169,7 +164,7 @@ mod test {
         let prev = graph.path(graph.nodes[0].clone());
         let path = ShortestPath::new(prev, graph.nodes[0].clone(), graph.nodes[9].clone());
 
-        assert_eq!(vec![Rc::new(9), Rc::new(1), Rc::new(0)], path.path());
+        assert_eq!(vec![9, 1, 0], path.path());
     }
 
     #[test]
@@ -184,6 +179,6 @@ mod test {
         let prev = graph.path(graph.nodes[0].clone());
         let path = ShortestPath::new(prev, graph.nodes[0].clone(), graph.nodes[9].clone());
 
-        assert_eq!(vec![Rc::new(9), Rc::new(3), Rc::new(2), Rc::new(1), Rc::new(0)], path.path());
+        assert_eq!(vec![9, 3, 2, 1, 0], path.path());
     }
 }
