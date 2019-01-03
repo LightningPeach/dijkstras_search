@@ -12,11 +12,20 @@ pub trait Edge {
 
 pub struct ShortestPath<Node> {
     prev_map: BTreeMap<Node, Node>,
-    sequence: Vec<Node>,
 }
 
 impl<Node> ShortestPath<Node> where Node: Eq + Ord + Clone {
-    pub fn new(prev_map: BTreeMap<Node, Node>, start: Node, goal: Node) -> Self {
+    fn new(prev_map: BTreeMap<Node, Node>) -> Self {
+        ShortestPath {
+            prev_map: prev_map,
+        }
+    }
+
+    pub fn prev(&self, node: &Node) -> Option<Node> {
+        self.prev_map.get(node).map(Clone::clone)
+    }
+
+    pub fn sequence(self, start: Node, goal: Node) -> Vec<Node> {
         let mut sequence = Vec::new();
         sequence.push(goal.clone());
 
@@ -26,7 +35,7 @@ impl<Node> ShortestPath<Node> where Node: Eq + Ord + Clone {
                 break
             }
 
-            match prev_map.get(&this) {
+            match self.prev(&this) {
                 Some(prev) => {
                     sequence.push(prev.clone());
                     this = prev.clone();
@@ -35,18 +44,7 @@ impl<Node> ShortestPath<Node> where Node: Eq + Ord + Clone {
             }
         }
 
-        ShortestPath {
-            prev_map: prev_map,
-            sequence: sequence,
-        }
-    }
-
-    pub fn prev(&self, node: Node) -> Option<Node> {
-        self.prev_map.get(&node).map(Clone::clone)
-    }
-
-    pub fn path(self) -> Vec<Node> {
-        self.sequence
+        sequence
     }
 }
 
@@ -59,7 +57,7 @@ where
 
     fn neighbors(&self, node: Self::Node) -> Vec<(Self::Node, Self::Edge)>;
 
-    fn path(&self, start: Self::Node) -> BTreeMap<Self::Node, Self::Node> {
+    fn shortest_path(&self, start: Self::Node) -> ShortestPath<Self::Node> {
         let mut distance: BTreeMap<Self::Node, <Self::Edge as Edge>::Cost> = BTreeMap::new();
         let mut prev = BTreeMap::new();
         distance.insert(start, Default::default());
@@ -88,13 +86,13 @@ where
             }
         }
 
-        prev
+        ShortestPath::new(prev)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::{ShortestPath, Edge, Graph};
+    use super::{Edge, Graph};
 
     #[derive(Default, Clone, Debug)]
     struct EdgeImpl {
@@ -161,10 +159,10 @@ mod test {
         graph.insert(2, 3, 40);
         graph.insert(3, 9, 10);
 
-        let prev = graph.path(graph.nodes[0].clone());
-        let path = ShortestPath::new(prev, graph.nodes[0].clone(), graph.nodes[9].clone());
+        let path = graph.shortest_path(graph.nodes[0].clone());
+        let sequence = path.sequence(graph.nodes[0].clone(), graph.nodes[9].clone());
 
-        assert_eq!(vec![9, 1, 0], path.path());
+        assert_eq!(vec![9, 1, 0], sequence);
     }
 
     #[test]
@@ -176,9 +174,9 @@ mod test {
         graph.insert(2, 3, 10);
         graph.insert(3, 9, 10);
 
-        let prev = graph.path(graph.nodes[0].clone());
-        let path = ShortestPath::new(prev, graph.nodes[0].clone(), graph.nodes[9].clone());
+        let path = graph.shortest_path(graph.nodes[0].clone());
+        let sequence = path.sequence(graph.nodes[0].clone(), graph.nodes[9].clone());
 
-        assert_eq!(vec![9, 3, 2, 1, 0], path.path());
+        assert_eq!(vec![9, 3, 2, 1, 0], sequence);
     }
 }
