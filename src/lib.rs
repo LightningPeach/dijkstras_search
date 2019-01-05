@@ -1,33 +1,35 @@
-use std::{
-    collections::BTreeMap,
-    iter::Iterator,
-    ops::Add,
-};
+use std::{collections::BTreeMap, ops::Add};
 
 pub trait Edge {
     type Cost: Default + Ord + Add<Self::Cost, Output = Self::Cost> + Clone;
+    type Context;
 
-    fn cost(&self) -> Self::Cost;
+    fn cost(&self, context: &mut Self::Context) -> Self::Cost;
 }
 
-pub struct ShortestPath<Node> {
-    prev_map: BTreeMap<Node, Node>,
+pub struct ShortestPath<Node, Edge> {
+    prev_map: BTreeMap<Node, (Node, Edge)>,
 }
 
-impl<Node> ShortestPath<Node> where Node: Eq + Ord + Clone {
-    fn new(prev_map: BTreeMap<Node, Node>) -> Self {
+impl<Node, Edge> ShortestPath<Node, Edge>
+where
+    Node: Eq + Ord + Clone,
+    Edge: Clone,
+{
+    fn new(prev_map: BTreeMap<Node, (Node, Edge)>) -> Self {
         ShortestPath {
             prev_map: prev_map,
         }
     }
 
-    pub fn prev(&self, node: &Node) -> Option<Node> {
+    pub fn prev(&self, node: &Node) -> Option<(Node, Edge)> {
         self.prev_map.get(node).map(Clone::clone)
     }
 
-    pub fn sequence(self, start: Node, goal: Node) -> Vec<Node> {
+    /// reverse sequence from goal to start
+    /// include node with corresponding edge does not include goal
+    pub fn sequence(self, start: Node, goal: Node) -> Vec<(Node, Edge)> {
         let mut sequence = Vec::new();
-        sequence.push(goal.clone());
 
         let mut this = goal;
         loop {
@@ -38,7 +40,7 @@ impl<Node> ShortestPath<Node> where Node: Eq + Ord + Clone {
             match self.prev(&this) {
                 Some(prev) => {
                     sequence.push(prev.clone());
-                    this = prev.clone();
+                    this = prev.0.clone();
                 },
                 None => break,
             }
@@ -53,11 +55,12 @@ where
     Self: Sized,
 {
     type Node: Ord + Clone + Eq;
-    type Edge: Edge;
+    type Edge: Edge<Context=Self::Context> + Clone;
+    type Context;
 
     fn neighbors(&self, node: Self::Node) -> Vec<(Self::Node, Self::Edge)>;
 
-    fn shortest_path(&self, start: Self::Node) -> ShortestPath<Self::Node> {
+    fn shortest_path(&self, context: &mut Self::Context, start: Self::Node) -> ShortestPath<Self::Node, Self::Edge> {
         let mut distance: BTreeMap<Self::Node, <Self::Edge as Edge>::Cost> = BTreeMap::new();
         let mut prev = BTreeMap::new();
         distance.insert(start, Default::default());
@@ -77,11 +80,11 @@ where
             visited.insert(min.clone(), ());
 
             for (this, edge) in self.neighbors(min.clone()) {
-                let alt = min_cost.clone() + edge.cost();
+                let alt = min_cost.clone() + edge.cost(context);
                 let this_distance = distance.get(&this);
                 if this_distance.is_none() || this_distance.unwrap().clone() >= alt {
                     distance.insert(this.clone(), alt);
-                    prev.insert(this.clone(), min.clone());
+                    prev.insert(this.clone(), (min.clone(), edge));
                 }
             }
         }
@@ -103,8 +106,10 @@ mod test {
 
     impl Edge for EdgeImpl {
         type Cost = u32;
+        type Context = ();
 
-        fn cost(&self) -> Self::Cost {
+        fn cost(&self, context: &mut Self::Context) -> Self::Cost {
+            let _ = context;
             self.weight.clone()
         }
     }
@@ -117,6 +122,7 @@ mod test {
     impl Graph for GraphImpl {
         type Node = u8;
         type Edge = EdgeImpl;
+        type Context = ();
 
         fn neighbors(&self, node: Self::Node) -> Vec<(Self::Node, Self::Edge)> {
             self.edges.iter().filter_map(|e| {
@@ -159,10 +165,13 @@ mod test {
         graph.insert(2, 3, 40);
         graph.insert(3, 9, 10);
 
-        let path = graph.shortest_path(graph.nodes[0].clone());
-        let sequence = path.sequence(graph.nodes[0].clone(), graph.nodes[9].clone());
+        let path = graph.shortest_path(&mut (), graph.nodes[0].clone());
+        let sequence = path.sequence(graph.nodes[0].clone(), graph.nodes[9].clone())
+            .into_iter()
+            .map(|(n, _)| n)
+            .collect::<Vec<_>>();
 
-        assert_eq!(vec![9, 1, 0], sequence);
+        assert_eq!(vec![1, 0], sequence);
     }
 
     #[test]
@@ -174,9 +183,12 @@ mod test {
         graph.insert(2, 3, 10);
         graph.insert(3, 9, 10);
 
-        let path = graph.shortest_path(graph.nodes[0].clone());
-        let sequence = path.sequence(graph.nodes[0].clone(), graph.nodes[9].clone());
+        let path = graph.shortest_path(&mut (), graph.nodes[0].clone());
+        let sequence = path.sequence(graph.nodes[0].clone(), graph.nodes[9].clone())
+            .into_iter()
+            .map(|(n, _)| n)
+            .collect::<Vec<_>>();
 
-        assert_eq!(vec![9, 3, 2, 1, 0], sequence);
+        assert_eq!(vec![3, 2, 1, 0], sequence);
     }
 }
