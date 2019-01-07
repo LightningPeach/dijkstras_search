@@ -4,7 +4,7 @@ pub trait Edge {
     type Cost: Default + Ord + Add<Self::Cost, Output = Self::Cost> + Clone;
     type Context;
 
-    fn cost(&self, context: &mut Self::Context) -> Self::Cost;
+    fn cost(&self, context: &Self::Context) -> Self::Cost;
 }
 
 pub struct ShortestPath<Node, Edge> {
@@ -60,7 +60,7 @@ where
 
     fn neighbors(&self, node: Self::Node) -> Vec<(Self::Node, Self::Edge)>;
 
-    fn shortest_path(&self, context: &mut Self::Context, start: Self::Node) -> ShortestPath<Self::Node, Self::Edge> {
+    fn shortest_path(&self, context: &Self::Context, start: Self::Node) -> ShortestPath<Self::Node, Self::Edge> {
         let mut distance: BTreeMap<Self::Node, <Self::Edge as Edge>::Cost> = BTreeMap::new();
         let mut prev = BTreeMap::new();
         distance.insert(start, Default::default());
@@ -108,7 +108,7 @@ mod test {
         type Cost = u32;
         type Context = ();
 
-        fn cost(&self, context: &mut Self::Context) -> Self::Cost {
+        fn cost(&self, context: &Self::Context) -> Self::Cost {
             let _ = context;
             self.weight.clone()
         }
@@ -165,7 +165,7 @@ mod test {
         graph.insert(2, 3, 40);
         graph.insert(3, 9, 10);
 
-        let path = graph.shortest_path(&mut (), graph.nodes[0].clone());
+        let path = graph.shortest_path(&(), graph.nodes[0].clone());
         let sequence = path.sequence(graph.nodes[0].clone(), graph.nodes[9].clone())
             .into_iter()
             .map(|(n, _)| n)
@@ -183,7 +183,7 @@ mod test {
         graph.insert(2, 3, 10);
         graph.insert(3, 9, 10);
 
-        let path = graph.shortest_path(&mut (), graph.nodes[0].clone());
+        let path = graph.shortest_path(&(), graph.nodes[0].clone());
         let sequence = path.sequence(graph.nodes[0].clone(), graph.nodes[9].clone())
             .into_iter()
             .map(|(n, _)| n)
